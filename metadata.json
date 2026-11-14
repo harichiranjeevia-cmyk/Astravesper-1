@@ -1,0 +1,8 @@
+{
+  "name": "Astra Vesper",
+  "description": "Astra Vesper — The primary parent brand and digital application ecosystem for Vioratundra products, services, and Viora AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

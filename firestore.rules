@@ -1,0 +1,464 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Hardened Helpers
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isBootstrappedOwner() {
+      return isVerified() && request.auth.token.email == 'mimoto3939@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        isBootstrappedOwner() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isSuperAdmin() {
+      return isVerified() && (
+        isBootstrappedOwner() ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin')
+      );
+    }
+
+    function hasAppPerm(permKey) {
+      return isVerified() && (
+        isBootstrappedOwner() ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ['super_admin', 'admin'] ||
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data[permKey] == true
+        ))
+      );
+    }
+
+    function isActiveUser(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+        get(/databases/$(database)/documents/users/$(userId)).data.status == 'active';
+    }
+
+    function isOptionalHttpsUrl(val, maxLen) {
+      return val is string && val.size() <= maxLen && (val == '' || val.matches('^https://.*'));
+    }
+
+    function isOptionalAssetOrHttpsUrl(val, maxLen) {
+      return val is string && val.size() <= maxLen && (val == '' || val.matches('^(https://|/|data:image/).*'));
+    }
+
+    function isAssetOrHttpsUrl(val, maxLen) {
+      return val is string && val.size() >= 1 && val.size() <= maxLen && val.matches('^(https://|/).*');
+    }
+
+    // -------------------------------------------------------------------------
+    // Validation Blueprints
+    // -------------------------------------------------------------------------
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'status', 'emailVerified', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'username', 'avatarUrl', 'bio',
+          'role', 'status', 'emailVerified', 'membershipStatus',
+          'themePreference', 'language', 'notificationsEnabled',
+          'privacyAnalyticsOptOut', 'privacyProfileVisible',
+          'adminSetupCompleted', 'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && (!('username' in data) || (data.username is string && data.username.size() >= 2 && data.username.size() <= 40))
+        && (!('avatarUrl' in data) || isOptionalHttpsUrl(data.avatarUrl, 500))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
+        && data.role in ['user', 'viewer', 'app_manager', 'content_manager', 'admin', 'super_admin']
+        && data.status in ['active', 'suspended']
+        && data.emailVerified is bool
+        && (!('membershipStatus' in data) || data.membershipStatus in ['none', 'member', 'early_access'])
+        && (!('themePreference' in data) || data.themePreference in ['system', 'light', 'dark'])
+        && (!('language' in data) || (data.language is string && data.language.size() <= 16))
+        && (!('notificationsEnabled' in data) || data.notificationsEnabled is bool)
+        && (!('privacyAnalyticsOptOut' in data) || data.privacyAnalyticsOptOut is bool)
+        && (!('privacyProfileVisible' in data) || data.privacyProfileVisible is bool)
+        && (!('adminSetupCompleted' in data) || data.adminSetupCompleted is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserActivity(data, userId) {
+      return data.keys().hasAll(['userId', 'action', 'targetName', 'category', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'action', 'targetName', 'category', 'createdAt'])
+        && data.userId is string && data.userId == userId
+        && data.action is string && data.action.size() >= 1 && data.action.size() <= 120
+        && data.targetName is string && data.targetName.size() >= 1 && data.targetName.size() <= 120
+        && data.category in ['launch', 'download', 'account', 'membership', 'security']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserDownload(data, userId) {
+      return data.keys().hasAll(['userId', 'productId', 'productName', 'version', 'platform', 'downloadUrl', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'productId', 'productName', 'version', 'platform', 'downloadUrl', 'createdAt'])
+        && data.userId is string && data.userId == userId
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 120
+        && data.version is string && data.version.size() >= 1 && data.version.size() <= 40
+        && data.platform is string && data.platform.size() >= 1 && data.platform.size() <= 60
+        && isAssetOrHttpsUrl(data.downloadUrl, 500)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidConnectedApp(data, userId) {
+      return data.keys().hasAll(['userId', 'productId', 'productName', 'status', 'connectedAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'productId', 'productName', 'status', 'connectedAt', 'updatedAt'])
+        && data.userId is string && data.userId == userId
+        && isValidId(data.productId)
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 120
+        && data.status in ['connected', 'revoked']
+        && data.connectedAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdminRecord(data, userId) {
+      return data.keys().hasAll([
+          'uid', 'email', 'role', 'permEditApps', 'permAddApps', 'permDeleteApps',
+          'permUploadMedia', 'permManageUsers', 'permViewAnalytics',
+          'permManageContent', 'permManageAi', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'email', 'role', 'permEditApps', 'permAddApps', 'permDeleteApps',
+          'permUploadMedia', 'permManageUsers', 'permViewAnalytics',
+          'permManageContent', 'permManageAi', 'assignedBy', 'passphraseConfigured',
+          'createdAt', 'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.role in ['super_admin', 'admin', 'content_manager', 'app_manager', 'viewer']
+        && data.permEditApps is bool
+        && data.permAddApps is bool
+        && data.permDeleteApps is bool
+        && data.permUploadMedia is bool
+        && data.permManageUsers is bool
+        && data.permViewAnalytics is bool
+        && data.permManageContent is bool
+        && data.permManageAi is bool
+        && (!('assignedBy' in data) || (data.assignedBy is string && data.assignedBy.size() <= 128))
+        && (!('passphraseConfigured' in data) || data.passphraseConfigured is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProduct(data, productId) {
+      return data.keys().hasAll([
+          'id', 'slug', 'name', 'tagline', 'description', 'category', 'status',
+          'published', 'featured', 'version', 'platforms', 'availableFeatures',
+          'plannedFeatures', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'slug', 'name', 'tagline', 'description', 'category', 'status',
+          'published', 'featured', 'version', 'platforms', 'websiteUrl', 'previewUrl',
+          'iconKey', 'heroImageUrl', 'screenshots', 'availableFeatures',
+          'plannedFeatures', 'releaseNotes', 'changelog', 'downloadUrl',
+          'ownerUid', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == productId
+        && data.slug is string && data.slug.size() >= 1 && data.slug.size() <= 100 && data.slug.matches('^[a-z0-9-]+$')
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.tagline is string && data.tagline.size() >= 1 && data.tagline.size() <= 200
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 2500
+        && data.category in ['Productivity', 'Artificial Intelligence', 'Music & Entertainment', 'Business Management', 'Creative Tools', 'Future Technologies']
+        && data.status in ['Available', 'Beta', 'In Development', 'Archived']
+        && data.published is bool
+        && data.featured is bool
+        && data.version is string && data.version.size() >= 1 && data.version.size() <= 40
+        && data.platforms is list && data.platforms.size() >= 1 && data.platforms.size() <= 10 && data.platforms[0] is string
+        && (!('websiteUrl' in data) || isOptionalHttpsUrl(data.websiteUrl, 500))
+        && (!('previewUrl' in data) || isOptionalHttpsUrl(data.previewUrl, 500))
+        && (!('iconKey' in data) || (data.iconKey is string && data.iconKey.size() <= 64))
+        && (!('heroImageUrl' in data) || isOptionalAssetOrHttpsUrl(data.heroImageUrl, 500))
+        && (!('screenshots' in data) || (data.screenshots is list && data.screenshots.size() <= 10 && (data.screenshots.size() == 0 || data.screenshots[0] is string)))
+        && data.availableFeatures is list && data.availableFeatures.size() <= 20 && (data.availableFeatures.size() == 0 || data.availableFeatures[0] is string)
+        && data.plannedFeatures is list && data.plannedFeatures.size() <= 20 && (data.plannedFeatures.size() == 0 || data.plannedFeatures[0] is string)
+        && (!('releaseNotes' in data) || (data.releaseNotes is string && data.releaseNotes.size() <= 3000))
+        && (!('changelog' in data) || (data.changelog is list && data.changelog.size() <= 25 && (data.changelog.size() == 0 || data.changelog[0] is map)))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 500 && (data.downloadUrl == '' || data.downloadUrl.matches('^(https://|/).*'))))
+        && (!('ownerUid' in data) || (data.ownerUid is string && data.ownerUid.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMembership(data) {
+      return data.keys().hasAll(['email', 'fullName', 'preferredUsername', 'interests', 'consentAccepted', 'createdAt'])
+        && data.keys().hasOnly(['email', 'fullName', 'preferredUsername', 'interests', 'message', 'consentAccepted', 'userId', 'createdAt'])
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 120
+        && data.preferredUsername is string && data.preferredUsername.size() >= 2 && data.preferredUsername.size() <= 40
+        && data.interests is list && data.interests.size() >= 1 && data.interests.size() <= 10 && data.interests[0] is string
+        && (!('message' in data) || (data.message is string && data.message.size() <= 1000))
+        && data.consentAccepted == true
+        && (!('userId' in data) || (data.userId is string && data.userId.size() <= 128))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSiteContent(data) {
+      return data.keys().hasAll(['heroHeadline', 'heroDescription', 'announcementVisible', 'companyDescription', 'membershipHeadline', 'membershipDescription', 'updatedAt'])
+        && data.keys().hasOnly(['heroHeadline', 'heroDescription', 'announcementBanner', 'announcementVisible', 'companyDescription', 'membershipHeadline', 'membershipDescription', 'footerContactEmail', 'updatedBy', 'updatedAt'])
+        && data.heroHeadline is string && data.heroHeadline.size() >= 1 && data.heroHeadline.size() <= 160
+        && data.heroDescription is string && data.heroDescription.size() >= 1 && data.heroDescription.size() <= 600
+        && (!('announcementBanner' in data) || (data.announcementBanner is string && data.announcementBanner.size() <= 300))
+        && data.announcementVisible is bool
+        && data.companyDescription is string && data.companyDescription.size() >= 1 && data.companyDescription.size() <= 1200
+        && data.membershipHeadline is string && data.membershipHeadline.size() >= 1 && data.membershipHeadline.size() <= 160
+        && data.membershipDescription is string && data.membershipDescription.size() >= 1 && data.membershipDescription.size() <= 600
+        && (!('footerContactEmail' in data) || (data.footerContactEmail is string && data.footerContactEmail.size() <= 254))
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAiConfig(data) {
+      return data.keys().hasAll(['enabled', 'systemInstructions', 'knowledgeNotes', 'totalQueries', 'updatedAt'])
+        && data.keys().hasOnly(['enabled', 'systemInstructions', 'knowledgeNotes', 'totalQueries', 'updatedBy', 'updatedAt'])
+        && data.enabled is bool
+        && data.systemInstructions is string && data.systemInstructions.size() <= 3000
+        && data.knowledgeNotes is string && data.knowledgeNotes.size() <= 4000
+        && data.totalQueries is number && data.totalQueries >= 0
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['actorUid', 'actorEmail', 'action', 'targetType', 'summary', 'createdAt'])
+        && data.keys().hasOnly(['actorUid', 'actorEmail', 'action', 'targetType', 'targetId', 'summary', 'createdAt'])
+        && data.actorUid is string && data.actorUid == request.auth.uid
+        && data.actorEmail is string && data.actorEmail.size() <= 254
+        && data.action is string && data.action.size() >= 1 && data.action.size() <= 120
+        && data.targetType is string && data.targetType.size() >= 1 && data.targetType.size() <= 64
+        && (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128))
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
+        && data.createdAt == request.time;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // Boot connectivity probe
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Users (PII isolated strictly to Owner or Authorized Admins)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || hasAppPerm('permManageUsers'));
+      allow list: if isVerified() && (resource.data.uid == request.auth.uid || isBootstrappedOwner());
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().role == 'user'
+        && incoming().status == 'active'
+        && incoming().email == request.auth.token.email
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: User edits own profile or preferences (cannot touch role/status/email)
+          (isOwner(userId)
+            && existing().status == 'active'
+            && incoming().role == existing().role
+            && incoming().status == existing().status
+            && incoming().email == existing().email
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'username', 'avatarUrl', 'bio', 'membershipStatus',
+              'themePreference', 'language', 'notificationsEnabled',
+              'privacyAnalyticsOptOut', 'privacyProfileVisible', 'updatedAt'
+            ]))
+          ||
+          // Action: Authorized admin manages role/status/setup
+          (hasAppPerm('permManageUsers')
+            && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'status', 'adminSetupCompleted', 'updatedAt']))
+          ||
+          // Action: Bootstrapped owner completes initial admin flag
+          (isBootstrappedOwner() && isOwner(userId)
+            && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'adminSetupCompleted', 'updatedAt']))
+        );
+
+      allow delete: if isValidId(userId) && (isOwner(userId) || isSuperAdmin());
+
+      // User Activity Subcollection (Master Gate)
+      match /activity/{activityId} {
+        allow get: if isValidId(userId) && isValidId(activityId) && (isOwner(userId) || hasAppPerm('permManageUsers'));
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(activityId)
+          && isOwner(userId)
+          && isActiveUser(userId)
+          && isValidUserActivity(incoming(), userId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(activityId) && isOwner(userId);
+      }
+
+      // User Downloads Subcollection (Master Gate)
+      match /downloads/{downloadId} {
+        allow get: if isValidId(userId) && isValidId(downloadId) && (isOwner(userId) || hasAppPerm('permManageUsers'));
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(downloadId)
+          && isOwner(userId)
+          && isActiveUser(userId)
+          && isValidUserDownload(incoming(), userId)
+          && incoming().createdAt == request.time;
+        allow update: if false;
+        allow delete: if isValidId(userId) && isValidId(downloadId) && isOwner(userId);
+      }
+
+      // User Connected Apps Subcollection (Master Gate)
+      match /connectedApps/{appId} {
+        allow get: if isValidId(userId) && isValidId(appId) && (isOwner(userId) || hasAppPerm('permManageUsers'));
+        allow list: if isVerified() && resource.data.userId == request.auth.uid;
+        allow create: if isValidId(userId) && isValidId(appId)
+          && isOwner(userId)
+          && isActiveUser(userId)
+          && isValidConnectedApp(incoming(), userId)
+          && incoming().connectedAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(appId)
+          && isOwner(userId)
+          && isActiveUser(userId)
+          && isValidConnectedApp(incoming(), userId)
+          && incoming().connectedAt == existing().connectedAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+        allow delete: if isValidId(userId) && isValidId(appId) && isOwner(userId);
+      }
+    }
+
+    // Trusted Admin Role Records
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isSuperAdmin());
+      allow list: if isBootstrappedOwner();
+      allow create: if isValidId(userId)
+        && isSuperAdmin()
+        && isValidAdminRecord(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId)
+        && isSuperAdmin()
+        && isValidAdminRecord(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'role', 'permEditApps', 'permAddApps', 'permDeleteApps',
+          'permUploadMedia', 'permManageUsers', 'permViewAnalytics',
+          'permManageContent', 'permManageAi', 'assignedBy',
+          'passphraseConfigured', 'updatedAt'
+        ]);
+      allow delete: if isValidId(userId) && isSuperAdmin();
+    }
+
+    // Products Catalog
+    match /products/{productId} {
+      allow get: if isValidId(productId) && (existing().published == true || isAdmin());
+      allow list: if resource.data.published == true || isBootstrappedOwner() || (isVerified() && resource.data.ownerUid == request.auth.uid);
+
+      allow create: if isValidId(productId)
+        && hasAppPerm('permAddApps')
+        && isValidProduct(incoming(), productId)
+        && (!('ownerUid' in incoming()) || incoming().ownerUid == request.auth.uid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(productId)
+        && hasAppPerm('permEditApps')
+        && isValidProduct(incoming(), productId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'slug', 'name', 'tagline', 'description', 'category', 'status',
+          'published', 'featured', 'version', 'platforms', 'websiteUrl', 'previewUrl',
+          'iconKey', 'heroImageUrl', 'screenshots', 'availableFeatures',
+          'plannedFeatures', 'releaseNotes', 'changelog', 'downloadUrl', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(productId) && hasAppPerm('permDeleteApps');
+    }
+
+    // Memberships (Keyed by sanitized email key; prevents duplicate signups and PII scraping)
+    match /memberships/{membershipId} {
+      allow get: if isValidId(membershipId) && (
+        isAdmin() ||
+        (isVerified() && existing().userId == request.auth.uid)
+      );
+      allow list: if isBootstrappedOwner();
+      allow create: if isValidId(membershipId)
+        && isValidMembership(incoming())
+        && incoming().createdAt == request.time
+        && (!('userId' in incoming()) || (isVerified() && incoming().userId == request.auth.uid));
+      allow update: if false;
+      allow delete: if isValidId(membershipId) && (isSuperAdmin() || (isVerified() && existing().userId == request.auth.uid));
+    }
+
+    // Website Content CMS
+    match /siteContent/{sectionId} {
+      allow get: if isValidId(sectionId);
+      allow create, update: if isValidId(sectionId)
+        && hasAppPerm('permManageContent')
+        && isValidSiteContent(incoming())
+        && (!('updatedBy' in incoming()) || incoming().updatedBy == request.auth.uid)
+        && incoming().updatedAt == request.time;
+    }
+
+    // Viora AI Config
+    match /aiConfig/{configId} {
+      allow get: if isValidId(configId);
+      allow create, update: if isValidId(configId)
+        && hasAppPerm('permManageAi')
+        && isValidAiConfig(incoming())
+        && (!('updatedBy' in incoming()) || incoming().updatedBy == request.auth.uid)
+        && incoming().updatedAt == request.time;
+    }
+
+    // Immutable Administrative Audit Logs
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isBootstrappedOwner();
+      allow create: if isValidId(logId)
+        && isAdmin()
+        && isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+  }
+}

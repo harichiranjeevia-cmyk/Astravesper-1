@@ -1,0 +1,232 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered Vioratundra account profile and privacy preferences.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "username": { "type": "string", "minLength": 2, "maxLength": 40, "pattern": "^[a-zA-Z0-9_.-]+$" },
+        "avatarUrl": { "type": "string", "maxLength": 500 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["user", "viewer", "app_manager", "content_manager", "admin", "super_admin"] },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "emailVerified": { "type": "boolean" },
+        "membershipStatus": { "type": "string", "enum": ["none", "member", "early_access"] },
+        "themePreference": { "type": "string", "enum": ["system", "light", "dark"] },
+        "language": { "type": "string", "maxLength": 16 },
+        "notificationsEnabled": { "type": "boolean" },
+        "privacyAnalyticsOptOut": { "type": "boolean" },
+        "privacyProfileVisible": { "type": "boolean" },
+        "adminSetupCompleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "role", "status", "emailVerified", "createdAt", "updatedAt"]
+    },
+    "UserActivity": {
+      "title": "UserActivity",
+      "description": "User application launch or account event.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "action": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "targetName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["launch", "download", "account", "membership", "security"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "action", "targetName", "category", "createdAt"]
+    },
+    "UserDownload": {
+      "title": "UserDownload",
+      "description": "Recorded real build download for an authenticated user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "version": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "platform": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "downloadUrl": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productId", "productName", "version", "platform", "downloadUrl", "createdAt"]
+    },
+    "ConnectedApp": {
+      "title": "ConnectedApp",
+      "description": "Vioratundra application connected to the user's account.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "status": { "type": "string", "enum": ["connected", "revoked"] },
+        "connectedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productId", "productName", "status", "connectedAt", "updatedAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Trusted role and granular permission assignment for administrators.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "role": { "type": "string", "enum": ["super_admin", "admin", "content_manager", "app_manager", "viewer"] },
+        "permEditApps": { "type": "boolean" },
+        "permAddApps": { "type": "boolean" },
+        "permDeleteApps": { "type": "boolean" },
+        "permUploadMedia": { "type": "boolean" },
+        "permManageUsers": { "type": "boolean" },
+        "permViewAnalytics": { "type": "boolean" },
+        "permManageContent": { "type": "boolean" },
+        "permManageAi": { "type": "boolean" },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "passphraseConfigured": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "permEditApps", "permAddApps", "permDeleteApps", "permUploadMedia", "permManageUsers", "permViewAnalytics", "permManageContent", "permManageAi", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Vioratundra digital application or product in the Astra Vesper store.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "tagline": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2500 },
+        "category": { "type": "string", "enum": ["Productivity", "Artificial Intelligence", "Music & Entertainment", "Business Management", "Creative Tools", "Future Technologies"] },
+        "status": { "type": "string", "enum": ["Available", "Beta", "In Development", "Archived"] },
+        "published": { "type": "boolean" },
+        "featured": { "type": "boolean" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "platforms": { "type": "array" },
+        "websiteUrl": { "type": "string", "maxLength": 500 },
+        "previewUrl": { "type": "string", "maxLength": 500 },
+        "iconKey": { "type": "string", "maxLength": 64 },
+        "heroImageUrl": { "type": "string", "maxLength": 500 },
+        "screenshots": { "type": "array" },
+        "availableFeatures": { "type": "array" },
+        "plannedFeatures": { "type": "array" },
+        "releaseNotes": { "type": "string", "maxLength": 3000 },
+        "changelog": { "type": "array" },
+        "downloadUrl": { "type": "string", "maxLength": 500 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "slug", "name", "tagline", "description", "category", "status", "published", "featured", "version", "platforms", "availableFeatures", "plannedFeatures", "createdAt", "updatedAt"]
+    },
+    "Membership": {
+      "title": "Membership",
+      "description": "Astra Vesper community membership signup record.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "preferredUsername": { "type": "string", "minLength": 2, "maxLength": 40, "pattern": "^[a-zA-Z0-9_.-]+$" },
+        "interests": { "type": "array" },
+        "message": { "type": "string", "maxLength": 1000 },
+        "consentAccepted": { "type": "boolean" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "fullName", "preferredUsername", "interests", "consentAccepted", "createdAt"]
+    },
+    "SiteContent": {
+      "title": "SiteContent",
+      "description": "CMS-managed homepage, announcement, membership, and footer content.",
+      "type": "object",
+      "properties": {
+        "heroHeadline": { "type": "string", "maxLength": 160 },
+        "heroDescription": { "type": "string", "maxLength": 600 },
+        "announcementBanner": { "type": "string", "maxLength": 300 },
+        "announcementVisible": { "type": "boolean" },
+        "companyDescription": { "type": "string", "maxLength": 1200 },
+        "membershipHeadline": { "type": "string", "maxLength": 160 },
+        "membershipDescription": { "type": "string", "maxLength": 600 },
+        "footerContactEmail": { "type": "string", "maxLength": 254 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["heroHeadline", "heroDescription", "announcementVisible", "companyDescription", "membershipHeadline", "membershipDescription", "updatedAt"]
+    },
+    "AiConfig": {
+      "title": "AiConfig",
+      "description": "Admin-managed Viora AI instructions, knowledge notes, and availability.",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "systemInstructions": { "type": "string", "maxLength": 3000 },
+        "knowledgeNotes": { "type": "string", "maxLength": 4000 },
+        "totalQueries": { "type": "number" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enabled", "systemInstructions", "knowledgeNotes", "totalQueries", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable administrative audit trail record.",
+      "type": "object",
+      "properties": {
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "actorEmail": { "type": "string", "maxLength": 254 },
+        "action": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "targetType": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "targetId": { "type": "string", "maxLength": 128 },
+        "summary": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorUid", "actorEmail", "action", "targetType", "summary", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Authenticated Vioratundra user profile and preferences."
+    },
+    "/users/{userId}/activity/{activityId}": {
+      "schema": { "$ref": "#/entities/UserActivity" },
+      "description": "Chronological activity entries scoped to a user."
+    },
+    "/users/{userId}/downloads/{downloadId}": {
+      "schema": { "$ref": "#/entities/UserDownload" },
+      "description": "Real build download history scoped to a user."
+    },
+    "/users/{userId}/connectedApps/{appId}": {
+      "schema": { "$ref": "#/entities/ConnectedApp" },
+      "description": "Vioratundra applications linked to the user's account."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Trusted administrator role and permission assignments."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Vioratundra applications listed in the Astra Vesper catalog."
+    },
+    "/memberships/{membershipId}": {
+      "schema": { "$ref": "#/entities/Membership" },
+      "description": "Astra Vesper membership registrations keyed by normalized email."
+    },
+    "/siteContent/{sectionId}": {
+      "schema": { "$ref": "#/entities/SiteContent" },
+      "description": "Publicly readable website CMS configuration editable by authorized admins."
+    },
+    "/aiConfig/{configId}": {
+      "schema": { "$ref": "#/entities/AiConfig" },
+      "description": "Viora AI configuration and usage counters."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable administrative audit logs."
+    }
+  }
+}
